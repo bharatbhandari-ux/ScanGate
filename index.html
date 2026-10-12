@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#14201b"><link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#14201b"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
 <title>ScanGate</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <style>
@@ -68,9 +68,10 @@ input:focus,select:focus,button:focus-visible{outline:3px solid #7bbf9b;outline-
   <button class="btn alt" id="rejectExtra">Reject order</button>
 </div></div>
 
+<script src="config.js"></script>
 <script>
 /* ====== CONFIG ====== */
-const API_URL = "https://script.google.com/macros/s/AKfycbyswcldXLNA0dR8erg_hQwem9e6nb-SbzOWjFgWoW9kvpFDLw3GdIY9I-FLfNOu9DnqnQ/exec";   // paste your Apps Script Web App URL here. Leave empty to run in demo mode.
+const API_URL = window.API_URL || "";   // set in config.js. Empty = demo mode.
 /* ==================== */
 
 const $ = s => document.querySelector(s);
@@ -151,7 +152,7 @@ async function register(){
     if(!/^\d{4,6}$/.test(d.new_pin)){$("#err").innerHTML='<div class="msg err">PIN must be 4 to 6 digits.</div>';return;}
     $("#sub").disabled=true;
     try{ S.runner=null; const r=await api("register",d); if(!r.ok) throw new Error(r.error||"Registration failed");
-      S.runner=d.new_id;S.pin=d.new_pin; localStorage.setItem("rh_user",JSON.stringify({id:d.new_id,pin:d.new_pin})); stores();
+      S.runner=d.new_id;S.pin=d.new_pin; localStorage.setItem("rh_user",JSON.stringify({id:d.new_id,pin:d.new_pin})); isStandalone()?stores():installScreen();
     }catch(e){ $("#sub").disabled=false; $("#err").innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
   };
 }
@@ -159,9 +160,9 @@ async function stores(){
   nav("Select store");
   $("#app").innerHTML=`<p style="color:var(--mute)">Loading stores…</p>`;
   try{ const r=await api("stores"); if(!r.ok) throw new Error(r.error);
-    $("#app").innerHTML=(r.stores.length?"":`<div class="msg info">No pending stores right now.</div>`)+r.stores.map(s=>
+    $("#app").innerHTML=installBanner()+(r.stores.length?"":`<div class="msg info">No pending stores right now.</div>`)+r.stores.map(s=>
       `<button class="store" data-v="${esc(s.vendor)}" data-n="${esc(s.name)}"><span>${esc(s.name)}<small>${esc([s.vendor,s.location,s.city].filter(Boolean).join(' · '))}</small></span><b>${s.count}</b></button>`).join("");
-    document.querySelectorAll(".store").forEach(b=>b.onclick=()=>openStore(b.dataset.v,b.dataset.n));
+    document.querySelectorAll(".store").forEach(b=>b.onclick=()=>openStore(b.dataset.v,b.dataset.n)); wireBanner();
   }catch(e){ $("#app").innerHTML=`<div class="msg err">${esc(e.message||"Could not load stores")}</div><button class="btn" onclick="stores()">Try again</button>`; }
 }
 async function openStore(vendor,name){
@@ -245,6 +246,38 @@ function success(){
   const s=stats(); nav("Handover complete");
   $("#app").innerHTML=`${countsHtml(s)}<div class="msg info">${s.received+s.extra.length} orders are now out for delivery.${s.missing.length?` ${s.missing.length} missing order(s) have been reported by email.`:""}</div>
     <button class="btn" onclick="stores()">Back to stores</button>`;
+}
+
+/* ---------- add to home screen ---------- */
+let deferredInstall=null;
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstall=e;});
+window.addEventListener("appinstalled",()=>{deferredInstall=null;});
+const isStandalone=()=>matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+const isIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent);
+function installHelp(){ return isIOS()?"Tap the Share button in Safari, then choose Add to Home Screen.":"Tap the browser menu (three dots), then choose Add to Home screen or Install app."; }
+function installScreen(){
+  nav("Add to home screen");
+  $("#app").innerHTML=`<div class="card"><h2>You are registered</h2>
+    <p style="margin:0 0 6px;color:var(--mute)">Add ScanGate to your home screen to open it in one tap.</p>
+    <div id="help"></div>
+    <button class="btn ok" id="inst">Add to home screen</button>
+    <button class="btn alt" id="skip">Skip for now</button></div>`;
+  $("#skip").onclick=stores;
+  $("#inst").onclick=async()=>{
+    if(deferredInstall){ deferredInstall.prompt(); try{ await deferredInstall.userChoice; }catch(e){} deferredInstall=null; stores(); }
+    else $("#help").innerHTML=`<div class="msg info">${installHelp()}</div>`;
+  };
+}
+function installBanner(){
+  if(isStandalone()||!deferredInstall||localStorage.getItem("rh_noinstall")) return "";
+  return `<div class="card" style="display:flex;gap:8px;align-items:center"><span style="flex:1">Add ScanGate to your home screen</span>
+    <button class="btn" style="width:auto;margin:0;padding:10px 14px" id="bannerInst">Add</button>
+    <button class="btn alt" style="width:auto;margin:0;padding:10px 12px" id="bannerNo">Later</button></div>`;
+}
+function wireBanner(){
+  const a=$("#bannerInst"); if(!a) return;
+  a.onclick=async()=>{ deferredInstall.prompt(); try{await deferredInstall.userChoice;}catch(e){} deferredInstall=null; stores(); };
+  $("#bannerNo").onclick=()=>{ localStorage.setItem("rh_noinstall","1"); stores(); };
 }
 
 /* ---------- boot ---------- */
