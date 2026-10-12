@@ -70,7 +70,7 @@ input:focus,select:focus,button:focus-visible{outline:3px solid #7bbf9b;outline-
 
 <script>
 /* ====== CONFIG ====== */
-const API_URL = "https://script.google.com/u/0/home/projects/17pb2y2yiRrOOD57N1XKJm8GK8kOd_xEA4r3tzgdrI-6Qbl_KG2DZTO9b/edit";   // paste your Apps Script Web App URL here. Leave empty to run in demo mode.
+const API_URL = "";   // paste your Apps Script Web App URL here. Leave empty to run in demo mode.
 /* ==================== */
 
 const $ = s => document.querySelector(s);
@@ -139,8 +139,9 @@ async function register(){
     <label for="nloc">Location</label><select id="nloc" disabled><option value="">Select city first</option></select>
     <div id="err"></div><button class="btn" id="sub">Register</button></div>`;
   let locs=[];
-  try{ const r=await api("locations"); locs=r.locations||[]; }catch(e){}
-  if(!locs.length){ $("#err").innerHTML='<div class="msg err">No locations set up yet. Ask your admin to fill the Locations tab.</div>'; }
+  let lerr="";
+  try{ const r=await api("locations"); if(r.ok) locs=r.locations||[]; else lerr=r.error||"Unknown server reply"; }catch(e){ lerr="Could not reach the server: "+e.message; }
+  if(!locs.length){ $("#err").innerHTML='<div class="msg err">'+esc(lerr||"The Locations tab has no rows with both city and location filled.")+'</div>'; }
   [...new Set(locs.map(l=>l.city))].forEach(c=>$("#ncity").insertAdjacentHTML("beforeend",`<option>${esc(c)}</option>`));
   $("#ncity").onchange=()=>{ const c=$("#ncity").value; const l=locs.filter(x=>x.city===c);
     $("#nloc").innerHTML=`<option value="">Select location</option>`+l.map(x=>`<option>${esc(x.location)}</option>`).join(""); $("#nloc").disabled=!c; };
@@ -159,7 +160,7 @@ async function stores(){
   $("#app").innerHTML=`<p style="color:var(--mute)">Loading stores…</p>`;
   try{ const r=await api("stores"); if(!r.ok) throw new Error(r.error);
     $("#app").innerHTML=(r.stores.length?"":`<div class="msg info">No pending stores right now.</div>`)+r.stores.map(s=>
-      `<button class="store" data-v="${esc(s.vendor)}" data-n="${esc(s.name)}"><span>${esc(s.name)}<small>${esc(s.vendor)}</small></span><b>${s.count}</b></button>`).join("");
+      `<button class="store" data-v="${esc(s.vendor)}" data-n="${esc(s.name)}"><span>${esc(s.name)}<small>${esc([s.vendor,s.location,s.city].filter(Boolean).join(' · '))}</small></span><b>${s.count}</b></button>`).join("");
     document.querySelectorAll(".store").forEach(b=>b.onclick=()=>openStore(b.dataset.v,b.dataset.n));
   }catch(e){ $("#app").innerHTML=`<div class="msg err">${esc(e.message||"Could not load stores")}</div><button class="btn" onclick="stores()">Try again</button>`; }
 }
